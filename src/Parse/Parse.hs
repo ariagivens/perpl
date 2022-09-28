@@ -360,11 +360,17 @@ parseTypes ps = parseElse [] (parseType3 ps >>= \ tp -> fmap ((:) tp) (parseType
 {-
 
 PROG ::=
-  | define VAR [: TYPE1] = TERM1;
+  | define VAR ... [: TYPE1] = TERM1;
   | extern VAR [: TYPE1];
   | data VAR VAR ... = VAR TYPE1 ... \| ...;
 
 -}
+
+usLams :: [TmVar] -> UsTm -> UsTm
+usLams xs tail =
+  case xs of
+    x:xs -> UsLam x NoTp (usLams xs tail)
+    [] -> tail 
 
 -- Program
 parseProg :: ParseM (Maybe UsProg)
@@ -372,10 +378,11 @@ parseProg = parsePeek >>= \ t -> case t of
 -- define x [: type] = term; ...
   TkFun -> parseEat *> pure Just <*>
        (parseVar >>= \ x ->
+        fmap (map TmV) parseVars >>= \xs ->
         parseTpAnn >>= \ tp ->
         parseDrop TkEq >>
         parseTerm1 >>= \ tm ->
-        pure (UsProgDefine (TmN x) tm tp) <* parseDrop TkSemicolon)
+        pure (UsProgDefine (TmN x) (usLams xs tm) tp) <* parseDrop TkSemicolon)
 -- extern x [: type]; ...
   TkExtern -> parseEat *> pure Just <*> (pure (UsProgExtern . TmN) <*> parseVar <*> parseTpAnn
                 <* parseDrop TkSemicolon)
